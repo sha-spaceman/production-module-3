@@ -171,7 +171,7 @@ def build_excel_bytes(qp_df, ms_df):
 st.markdown("""
 <div class="title-block">
   <h1>📄 QP / MS Parts Extractor</h1>
-  <p>Examinent · Automated question paper and mark scheme parts analysis</p>
+  <p> · Automated question paper and mark scheme parts analysis</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -257,6 +257,6 @@ else:
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    "<p style='text-align:center; color:#888; font-size:0.82rem;'>Examinent · QP/MS Parts Extractor</p>",
+    "<p style='text-align:center; color:#888; font-size:0.82rem;'>QP/MS Parts Extractor</p>",
     unsafe_allow_html=True,
 )
