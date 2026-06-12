@@ -1,359 +1,262 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 import io
+from openpyxl.styles import Font, PatternFill, Alignment
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Examinent · File Parts Extractor",
+    page_title="QP/MS Parts Extractor",
     page_icon="📄",
     layout="centered",
 )
 
-# ── Styling ───────────────────────────────────────────────────────────────────
+# ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=DM+Serif+Display&display=swap');
+    /* Main background */
+    .stApp { background-color: #f5f7fa; }
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
+    /* Title bar accent */
+    .title-block {
+        background: linear-gradient(90deg, #2E5090 0%, #4472C4 100%);
+        padding: 1.4rem 2rem 1rem 2rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+    }
+    .title-block h1 { color: #ffffff !important; margin: 0; font-size: 1.8rem; }
+    .title-block p  { color: #cdd9f0 !important; margin: 0.3rem 0 0 0; font-size: 0.95rem; }
 
-/* Top banner */
-.banner {
-    background: #0f2a4a;
-    border-radius: 12px;
-    padding: 2rem 2.2rem 1.6rem;
-    margin-bottom: 2rem;
-}
-.banner h1 {
-    font-family: 'DM Serif Display', serif;
-    color: #ffffff;
-    font-size: 1.9rem;
-    margin: 0 0 0.35rem 0;
-    letter-spacing: -0.01em;
-}
-.banner p {
-    color: #8fb3d9;
-    font-size: 0.92rem;
-    margin: 0;
-    line-height: 1.5;
-}
+    /* Cards */
+    .card {
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .card h3 { margin-top: 0; color: #2E5090; font-size: 1.05rem; }
 
-/* Section labels */
-.section-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #0f2a4a;
-    margin-bottom: 0.4rem;
-}
+    /* Stat boxes */
+    .stat-row { display: flex; gap: 1rem; margin-top: 0.5rem; }
+    .stat-box {
+        flex: 1;
+        background: #eef2fb;
+        border-left: 4px solid #2E5090;
+        border-radius: 6px;
+        padding: 0.7rem 1rem;
+        font-size: 0.9rem;
+        color: #2E5090;
+    }
+    .stat-box span { display: block; font-size: 1.6rem; font-weight: 700; color: #2E5090; }
 
-/* Board cards */
-.board-hint {
-    font-size: 0.82rem;
-    color: #607a96;
-    margin-top: 0.2rem;
-}
+    /* Radio label tweak */
+    div[data-testid="stRadio"] label { font-size: 0.97rem; }
 
-/* Result stat strip */
-.stat-strip {
-    display: flex;
-    gap: 1.2rem;
-    margin: 1.4rem 0 1rem;
-}
-.stat-card {
-    flex: 1;
-    background: #f0f5fb;
-    border: 1px solid #c9daea;
-    border-radius: 8px;
-    padding: 0.85rem 1rem;
-    text-align: center;
-}
-.stat-card .num {
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.8rem;
-    color: #0f2a4a;
-    line-height: 1;
-}
-.stat-card .lbl {
-    font-size: 0.78rem;
-    color: #607a96;
-    margin-top: 0.25rem;
-    font-weight: 500;
-}
+    /* Download button */
+    .stDownloadButton > button {
+        background-color: #2E5090 !important;
+        color: white !important;
+        border-radius: 6px !important;
+        padding: 0.55rem 1.4rem !important;
+        font-size: 0.97rem !important;
+        width: 100%;
+    }
+    .stDownloadButton > button:hover { background-color: #1d3a6e !important; }
 
-/* Download button override */
-.stDownloadButton > button {
-    background: #0f2a4a !important;
-    color: #ffffff !important;
-    border: none !important;
-    border-radius: 7px !important;
-    font-weight: 500 !important;
-    padding: 0.55rem 1.4rem !important;
-    width: 100%;
-}
-.stDownloadButton > button:hover {
-    background: #1a3f6f !important;
-}
-
-/* Divider */
-hr { border-color: #d6e4f0; margin: 1.6rem 0; }
-
-/* Tab strip */
-[data-baseweb="tab-list"] {
-    gap: 0.5rem;
-    border-bottom: 2px solid #d6e4f0;
-}
-[data-baseweb="tab"] {
-    font-size: 0.85rem !important;
-    font-weight: 500 !important;
-}
-
-/* Expander */
-details summary {
-    font-size: 0.85rem;
-    color: #0f2a4a;
-    font-weight: 500;
-}
-
-/* Footer */
-.footer {
-    text-align: center;
-    font-size: 0.75rem;
-    color: #aabfcf;
-    margin-top: 3rem;
-    padding-top: 1rem;
-    border-top: 1px solid #e2edf5;
-}
+    /* Tab styling */
+    .stTabs [data-baseweb="tab"] { font-size: 0.95rem; font-weight: 600; }
+    .stTabs [aria-selected="true"] { color: #2E5090 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Header banner ─────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="banner">
-  <h1>File Parts Extractor</h1>
-  <p>Upload your PNG filename list, choose an exam board, and download<br>
-  the QParts and MSParts breakdown as a ready-to-use Excel file.</p>
-</div>
-""", unsafe_allow_html=True)
-
-
 # ── Parsers ───────────────────────────────────────────────────────────────────
 def parse_caie(name):
-    q_paper  = name[:14]
-    q_number = name[15:17]
-    q_part   = name[18:19] if len(name) == 23 else ""
-    return q_paper, q_number, q_part
+    qp_ms = name[:14]
+    q_num = name[15:17]
+    q_part = name[18] if len(name) == 23 else "1"
+    return qp_ms, q_num, q_part
 
 
 def parse_edexcel(name):
-    if len(name) > 7 and name[7] == "r":
-        q_paper  = name[:21]
-        q_number = name[22:24]
-        len_short, len_long   = 29, 30
-        pos_short, pos_long   = 24, 25
+    if name[7:8] == "r":
+        qp_ms = name[:21]
+        q_num = name[22:24]
     else:
-        q_paper  = name[:20]
-        q_number = name[21:23]
-        len_short, len_long   = 28, 29
-        pos_short, pos_long   = 23, 24
-
-    if len(name) == len_short:
-        q_part = name[pos_short:pos_short + 1]
-    elif len(name) == len_long:
-        q_part = name[pos_long:pos_long + 1]
+        qp_ms = name[:20]
+        q_num = name[21:23]
+    if len(name) == 29:
+        q_part = name[24]
+    elif len(name) == 30:
+        q_part = name[25]
     else:
-        q_part = ""
-    return q_paper, q_number, q_part
+        q_part = "1"
+    return qp_ms, q_num, q_part
 
 
 def parse_ibdp(name):
-    q_paper  = name[:29]
-    q_number = name[30:32]
-    q_part   = name[33:34] if len(name) == 38 else ""
-    return q_paper, q_number, q_part
+    qp_ms = name[:29]
+    q_num = name[30:32]
+    q_part = name[33] if len(name) == 38 else "1"
+    return qp_ms, q_num, q_part
 
 
-PARSERS = {
-    "Cambridge (CAIE)":   parse_caie,
-    "Pearson Edexcel":    parse_edexcel,
-    "IBDP":               parse_ibdp,
-}
-
-QP_PATTERNS = {
-    "Cambridge (CAIE)":  "*qp*",
-    "Pearson Edexcel":   "*que*",
-    "IBDP":              "*qp*",
-}
-
-MS_PATTERNS = {
-    "Cambridge (CAIE)":  "*ms*",
-    "Pearson Edexcel":   "*rms*",
-    "IBDP":              "*ms*",
-}
-
-
-def like_filter(series, pattern):
-    inner = pattern.strip("*").lower()
-    s = series.str.lower()
-    if pattern.startswith("*") and pattern.endswith("*"):
-        return s.str.contains(inner, na=False)
-    elif pattern.startswith("*"):
-        return s.str.endswith(inner, na=False)
-    elif pattern.endswith("*"):
-        return s.str.startswith(inner, na=False)
-    return s == inner
+# ── Core logic ────────────────────────────────────────────────────────────────
+def build_parts_table(filenames, board):
+    parsers = {1: parse_caie, 2: parse_edexcel, 3: parse_ibdp}
+    parser = parsers[board]
+    rows = []
+    for name in filenames:
+        name = str(name).strip()
+        if not name:
+            continue
+        qp_ms, q_num, q_part = parser(name)
+        rows.append({
+            "Q paper/Mark Scheme": qp_ms,
+            "Q Number": q_num,
+            "Q part": q_part,
+        })
+    return pd.DataFrame(rows, columns=["Q paper/Mark Scheme", "Q Number", "Q part"])
 
 
-def run_query(df, pattern):
-    mask     = like_filter(df["Q paper/Mark Scheme"], pattern)
-    filtered = df[mask]
-    return (
-        filtered
-        .groupby(["Q paper/Mark Scheme", "Q Number"], sort=False)["Q part"]
-        .max()
-        .reset_index()
-        .rename(columns={"Q part": "MaxOfQ part"})
-    )
+def run_queries(df, board):
+    con = sqlite3.connect(":memory:")
+    df.to_sql("File Parts info", con, index=False, if_exists="replace")
+
+    if board in (1, 3):
+        qp_filter, ms_filter = "%qp%", "%ms%"
+    else:
+        qp_filter, ms_filter = "%que%", "%rms%"
+
+    sql = """
+        SELECT
+            "Q paper/Mark Scheme",
+            "Q Number",
+            MAX("Q part") AS "MaxOfQ part"
+        FROM "File Parts info"
+        GROUP BY "Q paper/Mark Scheme", "Q Number"
+        HAVING "Q paper/Mark Scheme" LIKE ?
+    """
+    qp_df = pd.read_sql_query(sql, con, params=(qp_filter,))
+    ms_df = pd.read_sql_query(sql, con, params=(ms_filter,))
+    con.close()
+    return qp_df, ms_df
 
 
-def build_excel(qp_df, ms_df):
+def build_excel_bytes(qp_df, ms_df):
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        qp_df.to_excel(writer, sheet_name="QParts",  index=False)
+        qp_df.to_excel(writer, sheet_name="QParts", index=False)
         ms_df.to_excel(writer, sheet_name="MSParts", index=False)
-    return buf.getvalue()
+
+        for sheet_name in ("QParts", "MSParts"):
+            ws = writer.sheets[sheet_name]
+            hfont = Font(name="Arial", bold=True, color="FFFFFF")
+            hfill = PatternFill("solid", start_color="2E5090")
+            for cell in ws[1]:
+                cell.font = hfont
+                cell.fill = hfill
+                cell.alignment = Alignment(horizontal="center")
+            for col in ws.columns:
+                max_len = max(len(str(c.value)) if c.value else 0 for c in col)
+                ws.column_dimensions[col[0].column_letter].width = max_len + 4
+            for row in ws.iter_rows(min_row=2):
+                for cell in row:
+                    cell.font = Font(name="Arial")
+    buf.seek(0)
+    return buf.read()
 
 
-# ── Step 1 — Board selection ──────────────────────────────────────────────────
-st.markdown('<div class="section-label">Step 1 — Examination Board</div>', unsafe_allow_html=True)
+# ── UI ────────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="title-block">
+  <h1>📄 QP / MS Parts Extractor</h1>
+  <p>Examinent · Automated question paper and mark scheme parts analysis</p>
+</div>
+""", unsafe_allow_html=True)
 
-board = st.radio(
+# Step 1 – Board selection
+st.markdown('<div class="card"><h3>① Select Examination Board</h3>', unsafe_allow_html=True)
+board_label = st.radio(
     label="board",
-    options=list(PARSERS.keys()),
+    options=["Cambridge (CAIE)", "Pearson Edexcel", "IBDP"],
     label_visibility="collapsed",
-    horizontal=False,
 )
+board = {"Cambridge (CAIE)": 1, "Pearson Edexcel": 2, "IBDP": 3}[board_label]
+st.markdown('</div>', unsafe_allow_html=True)
 
-HINTS = {
-    "Cambridge (CAIE)":  "Filenames follow the CAIE 14-character paper code convention.",
-    "Pearson Edexcel":   "Handles both standard and revision-paper ('r') filename formats.",
-    "IBDP":              "Filenames follow the 29-character IB paper code convention.",
-}
-st.markdown(f'<div class="board-hint">ℹ &nbsp;{HINTS[board]}</div>', unsafe_allow_html=True)
-
-st.markdown("<hr>", unsafe_allow_html=True)
-
-# ── Step 2 — File upload ──────────────────────────────────────────────────────
-st.markdown('<div class="section-label">Step 2 — Upload Filename List</div>', unsafe_allow_html=True)
-st.markdown(
-    "<p style='font-size:0.83rem;color:#607a96;margin-bottom:0.6rem;'>"
-    "Upload the Excel file containing a single column of PNG filenames (no header row).</p>",
-    unsafe_allow_html=True,
-)
-
+# Step 2 – File upload
+st.markdown('<div class="card"><h3>② Upload PNG Filenames List (.xlsx)</h3>', unsafe_allow_html=True)
 uploaded = st.file_uploader(
-    label="Choose an Excel file",
+    label="Excel file with a single column of PNG filenames (no header)",
     type=["xlsx", "xls"],
     label_visibility="collapsed",
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Step 3 — Process ──────────────────────────────────────────────────────────
+# Step 3 – Process
 if uploaded:
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Step 3 — Results</div>', unsafe_allow_html=True)
-
-    try:
-        raw       = pd.read_excel(uploaded, header=None, dtype=str)
-        filenames = raw.iloc[:, 0].dropna().str.strip().tolist()
-        filenames = [f for f in filenames if f]
-    except Exception as e:
-        st.error(f"Could not read the file: {e}")
-        st.stop()
+    raw = pd.read_excel(uploaded, header=None)
+    filenames = raw.iloc[:, 0].dropna().tolist()
 
     if not filenames:
-        st.warning("The uploaded file appears to be empty. Please check it and try again.")
+        st.error("No filenames found in the uploaded file. Please check the file contents.")
         st.stop()
 
-    parser = PARSERS[board]
-    records = []
-    errors  = []
-    for name in filenames:
-        try:
-            qp, qn, qt = parser(name)
-            records.append({
-                "Q paper/Mark Scheme": qp.strip(),
-                "Q Number":            qn.strip(),
-                "Q part":              qt.strip(),
-            })
-        except Exception:
-            errors.append(name)
+    with st.spinner("Processing filenames…"):
+        parts_df = build_parts_table(filenames, board)
+        qp_df, ms_df = run_queries(parts_df, board)
+        excel_bytes = build_excel_bytes(qp_df, ms_df)
 
-    if errors:
-        with st.expander(f"⚠ {len(errors)} filename(s) could not be parsed — click to review"):
-            st.dataframe(pd.DataFrame(errors, columns=["Filename"]), use_container_width=True)
-
-    file_parts = pd.DataFrame(records, columns=["Q paper/Mark Scheme", "Q Number", "Q part"])
-
-    qp_df = run_query(file_parts, QP_PATTERNS[board])
-    ms_df = run_query(file_parts, MS_PATTERNS[board])
-
-    # Stat strip
+    # Summary stats
     st.markdown(f"""
-    <div class="stat-strip">
-      <div class="stat-card">
-        <div class="num">{len(filenames)}</div>
-        <div class="lbl">Filenames loaded</div>
-      </div>
-      <div class="stat-card">
-        <div class="num">{len(qp_df)}</div>
-        <div class="lbl">QParts rows</div>
-      </div>
-      <div class="stat-card">
-        <div class="num">{len(ms_df)}</div>
-        <div class="lbl">MSParts rows</div>
+    <div class="card">
+      <h3>③ Results Summary</h3>
+      <div class="stat-row">
+        <div class="stat-box">Total filenames<span>{len(filenames)}</span></div>
+        <div class="stat-box">QParts rows<span>{len(qp_df)}</span></div>
+        <div class="stat-box">MSParts rows<span>{len(ms_df)}</span></div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Preview tabs
-    tab_qp, tab_ms, tab_raw = st.tabs(["📋 QParts", "📋 MSParts", "🗂 File Parts Info"])
+    # Preview tables
+    st.markdown('<div class="card"><h3>④ Preview</h3>', unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["📋 File Parts Info", "📘 QParts", "📗 MSParts"])
 
-    with tab_qp:
+    with tab1:
+        st.dataframe(parts_df, use_container_width=True, height=260)
+
+    with tab2:
         if qp_df.empty:
-            st.info("No question-paper records matched the filter for this board.")
+            st.info("No question paper records found for the selected board.")
         else:
-            st.dataframe(qp_df, use_container_width=True, hide_index=True)
+            st.dataframe(qp_df, use_container_width=True, height=260)
 
-    with tab_ms:
+    with tab3:
         if ms_df.empty:
-            st.info("No mark-scheme records matched the filter for this board.")
+            st.info("No mark scheme records found for the selected board.")
         else:
-            st.dataframe(ms_df, use_container_width=True, hide_index=True)
+            st.dataframe(ms_df, use_container_width=True, height=260)
 
-    with tab_raw:
-        st.caption("Full 'File Parts Info' table before grouping/filtering.")
-        st.dataframe(file_parts, use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Download
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Step 4 — Download</div>', unsafe_allow_html=True)
-
-    excel_bytes = build_excel(qp_df, ms_df)
+    st.markdown('<div class="card"><h3>⑤ Download Output</h3>', unsafe_allow_html=True)
     st.download_button(
-        label="⬇  Download QP_MS_Parts.xlsx",
+        label="⬇️  Download QP_MS_Parts.xlsx",
         data=excel_bytes,
         file_name="QP_MS_Parts.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    st.info("Upload an Excel file above to get started.")
+    st.info("Upload an Excel file above to begin processing.")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
+st.markdown("---")
 st.markdown(
-    '<div class="footer">Examinent · File Parts Extractor · '
-    'Built for CAIE, Edexcel &amp; IBDP workflows</div>',
+    "<p style='text-align:center; color:#888; font-size:0.82rem;'>Examinent · QP/MS Parts Extractor</p>",
     unsafe_allow_html=True,
 )
